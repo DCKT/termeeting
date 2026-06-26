@@ -115,9 +115,3 @@ export const make = Layer.effect(
   })
 )
 
-export const makeTest = (config?: Config): Layer.Layer<ConfigStore> =>
-  Layer.succeed(ConfigStore, {
-    read: () =>
-      Effect.succeed(config ? Option.some(config) : Option.none()),
-    write: (_config: Config) => Effect.void,
-  })

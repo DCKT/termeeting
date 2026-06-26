@@ -2,7 +2,8 @@ import { describe, it, expect } from "@effect/vitest"
 import { Effect, Layer } from "effect"
 import { HttpClient } from "@effect/platform/HttpClient"
 import { AuthService, AuthError } from "../../src/auth/AuthService.js"
-import { CalendarApi, CalendarError, make, makeTest } from "../../src/calendar/CalendarApi.js"
+import { CalendarApi, CalendarError, make } from "../../src/calendar/CalendarApi.js"
+import { makeTest } from "../helpers/CalendarApi.js"
 
 const mockCalendarResponse = {
   items: [

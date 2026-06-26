@@ -224,7 +224,3 @@ export const make = Layer.effect(
   })
 )
 
-export const makeTest = (events?: readonly Event[]): Layer.Layer<CalendarApi> =>
-  Layer.succeed(CalendarApi, {
-    getEvents: () => Effect.succeed({ events: events ?? [], workingLocations: [] }),
-  })

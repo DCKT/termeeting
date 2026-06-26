@@ -7,9 +7,10 @@ import {
   AuthService,
   AuthError,
   make,
-  makeTest,
 } from "../../src/auth/AuthService.js"
-import { PlatformService, makeTest as platformMakeTest } from "../../src/platform/PlatformService.js"
+import { makeTest } from "../helpers/AuthService.js"
+import { PlatformService } from "../../src/platform/PlatformService.js"
+import { makeTest as platformMakeTest } from "../helpers/PlatformService.js"
 
 const mockPlatform = platformMakeTest()
 

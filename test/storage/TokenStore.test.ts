@@ -3,7 +3,8 @@ import { Effect, Layer, Option } from "effect"
 import { FileSystem } from "@effect/platform/FileSystem"
 import { Path } from "@effect/platform/Path"
 import { TokenStore, TokenStoreError, make } from "../../src/storage/TokenStore.js"
-import { PlatformService, makeTest as platformMakeTest } from "../../src/platform/PlatformService.js"
+import { PlatformService } from "../../src/platform/PlatformService.js"
+import { makeTest as platformMakeTest } from "../helpers/PlatformService.js"
 
 const mockPath = Layer.succeed(Path, {
   sep: "/",

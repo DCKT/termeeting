@@ -2,8 +2,10 @@ import { describe, it, expect } from "@effect/vitest"
 import { Effect, Layer, Option } from "effect"
 import { FileSystem } from "@effect/platform/FileSystem"
 import { Path } from "@effect/platform/Path"
-import { AccountStore, AccountStoreError, make, makeTest } from "../../src/storage/AccountStore.js"
-import { PlatformService, makeTest as platformMakeTest } from "../../src/platform/PlatformService.js"
+import { AccountStore, AccountStoreError, make } from "../../src/storage/AccountStore.js"
+import { makeTest } from "../helpers/AccountStore.js"
+import { PlatformService } from "../../src/platform/PlatformService.js"
+import { makeTest as platformMakeTest } from "../helpers/PlatformService.js"
 
 const mockPath = Layer.succeed(Path, {
   sep: "/",

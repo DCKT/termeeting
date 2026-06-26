@@ -134,7 +134,8 @@ npm run build         # compile (if bundling)
 
 ## Conventions
 
-- Every service file exports: `Tag`, the class/interface, `make` (live layer), `makeTest` (test layer)
+- Every service file exports: `Tag`, the class/interface, `make` (live layer)
+- Test layer factories (`makeTest`) live in `test/helpers/<ServiceName>.ts`, one per service
 - Errors are tagged types (`Data.TaggedError`), never raw strings
 - No `any` or type casts in production code
 - No global `Error` in Effect error channels
