@@ -51,6 +51,9 @@ const formatDateLabel = (
   return isToday ? `Today — ${formatted}` : formatted
 }
 
+const stringifyJson = (data: unknown): string =>
+  JSON.stringify(Schema.encodeUnknownSync(Schema.Unknown)(data), null, 2)
+
 const formatEventsJson = (events: readonly Event[]): string => {
   const output = events.map((e) => ({
     id: e.id,
@@ -62,7 +65,7 @@ const formatEventsJson = (events: readonly Event[]): string => {
     ...(e.htmlLink ? { htmlLink: e.htmlLink } : {}),
     ...(e.conferenceLink ? { conferenceLink: e.conferenceLink } : {}),
   }))
-  return JSON.stringify(output, null, 2)
+  return stringifyJson(output)
 }
 
 const formatEventsHuman = (
@@ -125,7 +128,7 @@ const getTimezoneOffset = (epochMs: number, timeZone: string): string => {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(new Date(epochMs))
+  }).formatToParts(epochMs)
   const tzPart = parts.find((p) => p.type === "timeZoneName")
   const raw = tzPart?.value ?? "GMT"
   return raw === "GMT" ? "+00:00" : raw.replace("GMT", "")
@@ -138,7 +141,7 @@ const formatTimestamp = (epochMs: number, timeZone: string): string => {
     month: "2-digit",
     day: "2-digit",
   })
-  const dateStr = dateFmt.format(new Date(epochMs))
+  const dateStr = dateFmt.format(epochMs)
   return `${dateStr}T00:00:00${getTimezoneOffset(epochMs, timeZone)}`
 }
 
@@ -233,20 +236,16 @@ export const make = Layer.effect(
         }
 
         if (json) {
-          return JSON.stringify(
-            {
-              id: next.id,
-              title: next.title,
-              start: next.start,
-              end: next.end,
-              ...(next.location ? { location: next.location } : {}),
-              ...(next.description ? { description: next.description } : {}),
-              ...(next.htmlLink ? { htmlLink: next.htmlLink } : {}),
-              ...(next.conferenceLink ? { conferenceLink: next.conferenceLink } : {}),
-            },
-            null,
-            2
-          )
+          return stringifyJson({
+            id: next.id,
+            title: next.title,
+            start: next.start,
+            end: next.end,
+            ...(next.location ? { location: next.location } : {}),
+            ...(next.description ? { description: next.description } : {}),
+            ...(next.htmlLink ? { htmlLink: next.htmlLink } : {}),
+            ...(next.conferenceLink ? { conferenceLink: next.conferenceLink } : {}),
+          })
         }
 
         return formatNextEventHuman(next, timeZone)

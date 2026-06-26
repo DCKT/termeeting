@@ -13,6 +13,7 @@
     "dev": "tsc --watch",
     "lint": "tsc --noEmit",
     "build": "bun build --compile --target=bun-darwin-arm64 ./src/main.ts --outfile dist/termeeting",
+    "release": "semantic-release",
     "prepare": "effect-language-service patch && effect-tsgo patch"
   },
   "keywords": [],
@@ -32,6 +33,12 @@
     "@types/node": "^26.0.1",
     "@typescript/native-preview": "latest",
     "typescript": "^6.0.3",
-    "vitest": "^3.2.6"
+    "vitest": "^3.2.6",
+    "semantic-release": "^24.2.0",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/release-notes-generator": "^14.0.3",
+    "@semantic-release/npm": "^12.0.1",
+    "@semantic-release/github": "^11.0.2",
+    "@semantic-release/git": "^10.0.1"
   }
 }

@@ -15,5 +15,6 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
+      - run: bun run prepare
       - run: bun run typecheck
-      - run: bun test
+      - run: bun run test

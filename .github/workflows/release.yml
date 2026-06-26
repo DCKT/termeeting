@@ -18,7 +18,8 @@ jobs:
         with:
           bun-version: latest
       - run: bun install --frozen-lockfile
+      - run: bun run prepare
       - run: bun run build
-      - run: bunx semantic-release
+      - run: bun run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
