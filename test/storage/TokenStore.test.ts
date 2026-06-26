@@ -76,10 +76,10 @@ const makeFsLayer = (overrides: Partial<FileSystem>): Layer.Layer<FileSystem> =>
   } as any)
 
 describe("TokenStore", () => {
-  it.effect("reads tokens from file system", () =>
+  it.effect("reads tokens from file system by nickname", () =>
     Effect.gen(function* () {
       const store = yield* TokenStore
-      const result = yield* store.read()
+      const result = yield* store.read("work")
       expect(Option.isSome(result)).toBe(true)
       if (Option.isSome(result)) {
         expect(result.value.accessToken).toBe("access-123")
@@ -107,10 +107,10 @@ describe("TokenStore", () => {
     )
   )
 
-  it.effect("returns none when no token file", () =>
+  it.effect("returns none when no token file for nickname", () =>
     Effect.gen(function* () {
       const store = yield* TokenStore
-      const result = yield* store.read()
+      const result = yield* store.read("work")
       expect(result).toEqual(Option.none())
     }).pipe(
       Effect.provide(
@@ -123,7 +123,7 @@ describe("TokenStore", () => {
     )
   )
 
-  it.effect("writes tokens to disk", () =>
+  it.effect("writes tokens to disk for nickname", () =>
     Effect.gen(function* () {
       const store = yield* TokenStore
       const tokens = {
@@ -131,7 +131,7 @@ describe("TokenStore", () => {
         refreshToken: "new-refresh",
         expiry: "2026-06-26T00:00:00Z",
       }
-      yield* store.write(tokens)
+      yield* store.write("work", tokens)
     }).pipe(
       Effect.provide(
         baseLayer.pipe(
@@ -143,10 +143,28 @@ describe("TokenStore", () => {
     )
   )
 
+  it.effect("deletes token file for nickname", () =>
+    Effect.gen(function* () {
+      const store = yield* TokenStore
+      yield* store.deleteToken("work")
+    }).pipe(
+      Effect.provide(
+        baseLayer.pipe(
+          Layer.provideMerge(
+            makeFsLayer({
+              exists: () => Effect.succeed(true),
+              remove: () => Effect.void,
+            })
+          )
+        )
+      )
+    )
+  )
+
   it.effect("read fails on file system error", () =>
     Effect.gen(function* () {
       const store = yield* TokenStore
-      const error = yield* store.read().pipe(Effect.flip)
+      const error = yield* store.read("work").pipe(Effect.flip)
       expect(error).toBeInstanceOf(TokenStoreError)
     }).pipe(
       Effect.provide(
@@ -157,6 +175,36 @@ describe("TokenStore", () => {
             })
           )
         )
+      )
+    )
+  )
+
+  it.effect("makeTest returns mock tokens for nickname", () =>
+    Effect.gen(function* () {
+      const store = yield* TokenStore
+      const result = yield* store.read("work")
+      expect(Option.isSome(result)).toBe(true)
+      if (Option.isSome(result)) {
+        expect(result.value.accessToken).toBe("test-token")
+      }
+      const noneResult = yield* store.read("nonexistent")
+      expect(noneResult).toEqual(Option.none())
+    }).pipe(
+      Effect.provide(
+        Layer.succeed(TokenStore, {
+          read: (nickname: string) =>
+            Effect.succeed(
+              nickname === "work"
+                ? Option.some({
+                    accessToken: "test-token",
+                    refreshToken: "test-refresh",
+                    expiry: new Date(Date.now() + 3600000).toISOString(),
+                  })
+                : Option.none()
+            ),
+          write: (_nickname: string, _tokens: any) => Effect.void,
+          deleteToken: (_nickname: string) => Effect.void,
+        })
       )
     )
   )

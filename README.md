@@ -47,19 +47,45 @@ Click **Save**.
 termeeting setup
 ```
 
-Enter your Client ID and Client Secret when prompted. A browser opens for OAuth consent, and tokens are stored automatically at `~/.config/termeeting/config.json`.
+Enter your Client ID and Client Secret when prompted. A browser opens for OAuth consent.
+Your first account (nicknamed "default") is created automatically.
 
-The app requests the `https://www.googleapis.com/auth/calendar.readonly` scope — read-only access to your primary calendar.
+The app requests the `https://www.googleapis.com/auth/calendar.readonly` scope — read-only access to the primary calendar of each linked Google account.
+
+## Accounts
+
+Termeeting supports multiple Google Calendar identities.
+
+```bash
+termeeting account add work         # add another Google account
+termeeting account add personal     # add another
+termeeting account list             # show all accounts
+termeeting account set-default work # set default for bare `termeeting` call
+termeeting account remove personal  # remove an account
+```
+
+Each account stores its OAuth tokens separately. Use `--account` to select one:
+
+```bash
+termeeting --account work           # events from work calendar
+termeeting --account personal --json  # personal events as JSON
+```
+
+If no `--account` is given, the default account is used.
 
 ## Usage
 
 ```bash
-termeeting                  # today's events, human-readable table
-termeeting next             # next upcoming event today
-termeeting next --json      # next upcoming event, JSON
-termeeting --json           # today's events, JSON
-termeeting --date 2026-06-30  # events for a specific date
-termeeting setup            # guided OAuth app registration
+termeeting                              # today's events (default account)
+termeeting --account work --json        # work events, JSON
+termeeting --account personal --date 2026-06-30  # personal events for a date
+termeeting next                         # next upcoming event (default account)
+termeeting next --json                  # next event as JSON
+termeeting setup                        # guided OAuth app registration + first account
+termeeting account add <name>           # add another Google account
+termeeting account list                 # list all accounts
+termeeting account set-default <name>   # change default account
+termeeting account remove <name>        # remove an account
 ```
 
 Example output:
@@ -69,6 +95,20 @@ Example output:
 ─────────────────────────────────────
 09:00–10:00  Standup              (Room 3)
 14:00–15:00  Design review        Google Meet
+```
+
+Account list example:
+
+```
+  work       alice@company.com  (default)
+  personal   alice@gmail.com
+```
+
+Account list with `--json`:
+
+```bash
+termeeting account list --json
+# [{"nickname":"work","email":"alice@company.com"},{"nickname":"personal","email":"alice@gmail.com"}]
 ```
 
 ## Development

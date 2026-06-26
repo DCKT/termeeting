@@ -6,8 +6,6 @@ import { TokenStore, TokenStoreError } from "../../src/storage/TokenStore.js"
 import {
   AuthService,
   AuthError,
-  AuthRetryableError,
-  AuthFatalError,
   make,
   makeTest,
 } from "../../src/auth/AuthService.js"
@@ -21,7 +19,11 @@ const mockHttpClient = Layer.succeed(HttpClient, {
       status: 200,
       json: Effect.succeed({}),
     } as any),
-  get: () => Effect.succeed({} as any),
+  get: () =>
+    Effect.succeed({
+      status: 200,
+      json: Effect.succeed({}),
+    } as any),
   post: () => Effect.succeed({} as any),
   head: () => Effect.succeed({} as any),
   patch: () => Effect.succeed({} as any),
@@ -36,10 +38,10 @@ const baseLayer = make.pipe(
 )
 
 describe("AuthService", () => {
-  it.effect("returns access token when valid tokens exist", () =>
+  it.effect("getAccessToken returns token when valid tokens exist", () =>
     Effect.gen(function* () {
       const auth = yield* AuthService
-      const token = yield* auth.getAccessToken()
+      const token = yield* auth.getAccessToken("work")
       expect(token).toBe("valid-access-token")
     }).pipe(
       Effect.provide(
@@ -55,7 +57,7 @@ describe("AuthService", () => {
           ),
           Layer.provideMerge(
             Layer.succeed(TokenStore, {
-              read: () =>
+              read: (_nickname: string) =>
                 Effect.succeed(
                   Option.some({
                     accessToken: "valid-access-token",
@@ -64,6 +66,7 @@ describe("AuthService", () => {
                   })
                 ),
               write: () => Effect.void,
+              deleteToken: () => Effect.void,
             })
           )
         )
@@ -74,7 +77,7 @@ describe("AuthService", () => {
   it.effect("refreshes tokens when expired", () =>
     Effect.gen(function* () {
       const auth = yield* AuthService
-      const token = yield* auth.getAccessToken()
+      const token = yield* auth.getAccessToken("work")
       expect(token).toBe("refreshed-token")
     }).pipe(
       Effect.provide(
@@ -90,7 +93,11 @@ describe("AuthService", () => {
                     refresh_token: "new-refresh",
                   }),
                 } as any),
-              get: () => Effect.succeed({} as any),
+              get: () =>
+                Effect.succeed({
+                  status: 200,
+                  json: Effect.succeed({ id: "test@example.com" }),
+                } as any),
               post: () => Effect.succeed({} as any),
               head: () => Effect.succeed({} as any),
               patch: () => Effect.succeed({} as any),
@@ -110,7 +117,7 @@ describe("AuthService", () => {
           ),
           Layer.provideMerge(
             Layer.succeed(TokenStore, {
-              read: () =>
+              read: (_nickname: string) =>
                 Effect.succeed(
                   Option.some({
                     accessToken: "expired-token",
@@ -119,6 +126,7 @@ describe("AuthService", () => {
                   })
                 ),
               write: () => Effect.void,
+              deleteToken: () => Effect.void,
             })
           ),
           Layer.provideMerge(mockPlatform)
@@ -127,10 +135,10 @@ describe("AuthService", () => {
     )
   )
 
-  it.effect("fails when config is missing", () =>
+  it.effect("getAccessToken fails when config is missing", () =>
     Effect.gen(function* () {
       const auth = yield* AuthService
-      const error = yield* auth.getAccessToken().pipe(Effect.flip)
+      const error = yield* auth.getAccessToken("work").pipe(Effect.flip)
       expect(error).toBeInstanceOf(AuthError)
       expect(error.message).toContain("Not configured")
     }).pipe(
@@ -146,6 +154,7 @@ describe("AuthService", () => {
             Layer.succeed(TokenStore, {
               read: () => Effect.succeed(Option.none()),
               write: () => Effect.void,
+              deleteToken: () => Effect.void,
             })
           )
         )
@@ -153,10 +162,10 @@ describe("AuthService", () => {
     )
   )
 
-  it.effect("fails when config store errors", () =>
+  it.effect("getAccessToken fails when config store errors", () =>
     Effect.gen(function* () {
       const auth = yield* AuthService
-      const error = yield* auth.getAccessToken().pipe(Effect.flip)
+      const error = yield* auth.getAccessToken("work").pipe(Effect.flip)
       expect(error).toBeInstanceOf(AuthError)
       expect(error.message).toContain("Failed to read config")
     }).pipe(
@@ -175,6 +184,7 @@ describe("AuthService", () => {
             Layer.succeed(TokenStore, {
               read: () => Effect.succeed(Option.none()),
               write: () => Effect.void,
+              deleteToken: () => Effect.void,
             })
           )
         )
@@ -182,10 +192,10 @@ describe("AuthService", () => {
     )
   )
 
-  it.effect("fails when token store errors", () =>
+  it.effect("getAccessToken fails when token store errors", () =>
     Effect.gen(function* () {
       const auth = yield* AuthService
-      const error = yield* auth.getAccessToken().pipe(Effect.flip)
+      const error = yield* auth.getAccessToken("work").pipe(Effect.flip)
       expect(error).toBeInstanceOf(AuthError)
       expect(error.message).toContain("Failed to read tokens")
     }).pipe(
@@ -207,6 +217,7 @@ describe("AuthService", () => {
                   new TokenStoreError({ message: "disk failure" })
                 ),
               write: () => Effect.void,
+              deleteToken: () => Effect.void,
             })
           )
         )
@@ -217,73 +228,8 @@ describe("AuthService", () => {
   it.effect("makeTest returns mock token", () =>
     Effect.gen(function* () {
       const auth = yield* AuthService
-      const token = yield* auth.getAccessToken()
+      const token = yield* auth.getAccessToken("any")
       expect(token).toBe("test-access-token")
     }).pipe(Effect.provide(makeTest("test-access-token")))
   )
-
-  describe("authenticate", () => {
-    it.effect("fails when config is missing", () =>
-      Effect.gen(function* () {
-        const auth = yield* AuthService
-        const error = yield* auth.authenticate().pipe(Effect.flip)
-        expect(error).toBeInstanceOf(AuthFatalError)
-        expect(error.message).toContain("Not configured")
-      }).pipe(
-        Effect.provide(
-          baseLayer.pipe(
-            Layer.provideMerge(
-              Layer.succeed(ConfigStore, {
-                read: () => Effect.succeed(Option.none()),
-                write: () => Effect.void,
-              })
-            ),
-            Layer.provideMerge(
-              Layer.succeed(TokenStore, {
-                read: () => Effect.succeed(Option.none()),
-                write: () => Effect.void,
-              })
-            )
-          )
-        )
-      )
-    )
-
-    it.effect("fails when config store errors", () =>
-      Effect.gen(function* () {
-        const auth = yield* AuthService
-        const error = yield* auth.authenticate().pipe(Effect.flip)
-        expect(error).toBeInstanceOf(AuthFatalError)
-        expect(error.message).toContain("Failed to read config")
-      }).pipe(
-        Effect.provide(
-          baseLayer.pipe(
-            Layer.provideMerge(
-              Layer.succeed(ConfigStore, {
-                read: () =>
-                  Effect.fail(
-                    new ConfigStoreError({ message: "disk failure" })
-                  ),
-                write: () => Effect.void,
-              })
-            ),
-            Layer.provideMerge(
-              Layer.succeed(TokenStore, {
-                read: () => Effect.succeed(Option.none()),
-                write: () => Effect.void,
-              })
-            )
-          )
-        )
-      )
-    )
-
-    it.effect("makeTest authenticate returns void", () =>
-      Effect.gen(function* () {
-        const auth = yield* AuthService
-        const result = yield* auth.authenticate()
-        expect(result).toBeUndefined()
-      }).pipe(Effect.provide(makeTest()))
-    )
-  })
 })

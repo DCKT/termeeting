@@ -30,8 +30,9 @@ export class TokenStoreError extends Schema.TaggedError<TokenStoreError>()(
 export class TokenStore extends Context.Tag("TokenStore")<
   TokenStore,
   {
-    readonly read: () => Effect.Effect<Option.Option<TokenSet>, TokenStoreError>
-    readonly write: (tokens: TokenSet) => Effect.Effect<void, TokenStoreError>
+    readonly read: (nickname: string) => Effect.Effect<Option.Option<TokenSet>, TokenStoreError>
+    readonly write: (nickname: string, tokens: TokenSet) => Effect.Effect<void, TokenStoreError>
+    readonly deleteToken: (nickname: string) => Effect.Effect<void, TokenStoreError>
   }
 >() {}
 
@@ -42,23 +43,23 @@ export const make = Layer.effect(
     const path = yield* Path
     const platform = yield* PlatformService
     const configDir = path.join(platform.homeDir, ".config", "termeeting")
-    const tokenFile = path.join(configDir, "google-token.json")
+    const tokensDir = path.join(configDir, "tokens")
 
-    const ensureDir = (): Effect.Effect<void, TokenStoreError> =>
+    const ensureDir = (dir: string): Effect.Effect<void, TokenStoreError> =>
       Effect.gen(function* () {
-        const exists = yield* fs.exists(configDir).pipe(
+        const exists = yield* fs.exists(dir).pipe(
           Effect.mapError((cause) =>
             new TokenStoreError({
-              message: "Failed to check config directory existence",
+              message: "Failed to check directory existence",
               cause,
             })
           )
         )
         if (!exists) {
-          yield* fs.makeDirectory(configDir, { recursive: true }).pipe(
+          yield* fs.makeDirectory(dir, { recursive: true }).pipe(
             Effect.mapError((cause) =>
               new TokenStoreError({
-                message: "Failed to create config directory",
+                message: "Failed to create directory",
                 cause,
               })
             )
@@ -66,9 +67,13 @@ export const make = Layer.effect(
         }
       })
 
-    const read = (): Effect.Effect<Option.Option<TokenSet>, TokenStoreError> =>
+    const tokenFile = (nickname: string) =>
+      path.join(tokensDir, `${nickname}.json`)
+
+    const read = (nickname: string): Effect.Effect<Option.Option<TokenSet>, TokenStoreError> =>
       Effect.gen(function* () {
-        const exists = yield* fs.exists(tokenFile).pipe(
+        const file = tokenFile(nickname)
+        const exists = yield* fs.exists(file).pipe(
           Effect.mapError((cause) =>
             new TokenStoreError({
               message: "Failed to check token file existence",
@@ -79,7 +84,7 @@ export const make = Layer.effect(
         if (!exists) {
           return Option.none()
         }
-        const content = yield* fs.readFileString(tokenFile).pipe(
+        const content = yield* fs.readFileString(file).pipe(
           Effect.mapError((cause) =>
             new TokenStoreError({
               message: "Failed to read token file",
@@ -100,10 +105,10 @@ export const make = Layer.effect(
         return Option.some(tokens)
       })
 
-    const write = (tokens: TokenSet): Effect.Effect<void, TokenStoreError> =>
+    const write = (nickname: string, tokens: TokenSet): Effect.Effect<void, TokenStoreError> =>
       Effect.gen(function* () {
-        yield* ensureDir()
-        yield* fs.writeFileString(tokenFile, serializeTokens(tokens)).pipe(
+        yield* ensureDir(tokensDir)
+        yield* fs.writeFileString(tokenFile(nickname), serializeTokens(tokens)).pipe(
           Effect.mapError((cause) =>
             new TokenStoreError({
               message: "Failed to write token file",
@@ -113,13 +118,39 @@ export const make = Layer.effect(
         )
       })
 
-    return { read, write } as const
+    const deleteToken = (nickname: string): Effect.Effect<void, TokenStoreError> =>
+      Effect.gen(function* () {
+        const file = tokenFile(nickname)
+        const exists = yield* fs.exists(file).pipe(
+          Effect.mapError((cause) =>
+            new TokenStoreError({
+              message: "Failed to check token file existence",
+              cause,
+            })
+          )
+        )
+        if (exists) {
+          yield* fs.remove(file).pipe(
+            Effect.mapError((cause) =>
+              new TokenStoreError({
+                message: "Failed to delete token file",
+                cause,
+              })
+            )
+          )
+        }
+      })
+
+    return { read, write, deleteToken } as const
   })
 )
 
-export const makeTest = (tokens?: TokenSet): Layer.Layer<TokenStore> =>
+export const makeTest = (tokensByNickname?: Record<string, TokenSet>): Layer.Layer<TokenStore> =>
   Layer.succeed(TokenStore, {
-    read: () =>
-      Effect.succeed(tokens ? Option.some(tokens) : Option.none()),
-    write: (_tokens: TokenSet) => Effect.void,
+    read: (nickname: string) => {
+      const tokens = tokensByNickname?.[nickname]
+      return Effect.succeed(tokens ? Option.some(tokens) : Option.none())
+    },
+    write: (_nickname: string, _tokens: TokenSet) => Effect.void,
+    deleteToken: (_nickname: string) => Effect.void,
   })

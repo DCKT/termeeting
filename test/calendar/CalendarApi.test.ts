@@ -26,21 +26,56 @@ const mockCalendarResponse = {
   ],
 }
 
+const mockWlResponse = {
+  items: [
+    {
+      id: "evt1",
+      summary: "Standup",
+      start: { dateTime: "2026-06-25T09:00:00+02:00" },
+      end: { dateTime: "2026-06-25T09:30:00+02:00" },
+      location: "Room 3",
+    },
+    {
+      id: "wl1",
+      eventType: "workingLocation",
+      workingLocationProperties: {
+        type: "officeLocation",
+        officeLocation: { label: "HQ" },
+      },
+      start: { dateTime: "2026-06-25T09:00:00+02:00" },
+      end: { dateTime: "2026-06-25T17:00:00+02:00" },
+    },
+    {
+      id: "wl2",
+      eventType: "workingLocation",
+      workingLocationProperties: {
+        type: "homeOffice",
+        homeOffice: {},
+      },
+      start: { date: "2026-06-25" },
+      end: { date: "2026-06-26" },
+    },
+  ],
+}
+
 describe("CalendarApi", () => {
   const authLayer = Layer.succeed(AuthService, {
-    getAccessToken: () => Effect.succeed("test-token"),
+    getAccessToken: (_nickname: string) => Effect.succeed("test-token"),
+    runDeviceFlow: () => Effect.succeed({ tokens: { accessToken: "", refreshToken: "", expiry: "" }, email: "" }),
   })
 
   it.effect("fetches and parses events", () =>
     Effect.gen(function* () {
       const api = yield* CalendarApi
-      const events = yield* api.getEvents(
+      const { events, workingLocations } = yield* api.getEvents(
+        "work",
         "2026-06-25T00:00:00+02:00",
         "2026-06-26T00:00:00+02:00",
         "Europe/Paris"
       )
 
       expect(events.length).toBe(2)
+      expect(workingLocations.length).toBe(0)
       expect(events[0]?.title).toBe("Standup")
       expect(events[0]?.location).toBe("Room 3")
       expect(events[0]?.start).toBe("2026-06-25T09:00:00+02:00")
@@ -76,15 +111,67 @@ describe("CalendarApi", () => {
     )
   )
 
+  it.effect("parses working location events", () =>
+    Effect.gen(function* () {
+      const api = yield* CalendarApi
+      const { events, workingLocations } = yield* api.getEvents(
+        "work",
+        "2026-06-25T00:00:00+02:00",
+        "2026-06-26T00:00:00+02:00",
+        "Europe/Paris"
+      )
+
+      expect(events.length).toBe(1)
+      expect(events[0]?.title).toBe("Standup")
+
+      expect(workingLocations.length).toBe(2)
+      expect(workingLocations[0]?.type).toBe("officeLocation")
+      expect(workingLocations[0]?.label).toBe("🏢 Working at HQ")
+      expect(workingLocations[0]?.start).toBe("2026-06-25T09:00:00+02:00")
+
+      expect(workingLocations[1]?.type).toBe("homeOffice")
+      expect(workingLocations[1]?.label).toBe("🏠 Working from home")
+      expect(workingLocations[1]?.start).toBe("2026-06-25")
+    }).pipe(
+      Effect.provide(
+        make.pipe(
+          Layer.provideMerge(authLayer),
+          Layer.provideMerge(
+            Layer.succeed(HttpClient, {
+              execute: () =>
+                Effect.succeed({
+                  status: 200,
+                  json: Effect.succeed(mockWlResponse),
+                } as any),
+              get: () =>
+                Effect.succeed({
+                  status: 200,
+                  json: Effect.succeed(mockWlResponse),
+                } as any),
+              post: () => Effect.succeed({} as any),
+              head: () => Effect.succeed({} as any),
+              patch: () => Effect.succeed({} as any),
+              put: () => Effect.succeed({} as any),
+              del: () => Effect.succeed({} as any),
+              options: () => Effect.succeed({} as any),
+            } as any)
+          )
+        )
+      )
+    )
+  )
+
   it.effect("returns empty array when no events", () =>
     Effect.gen(function* () {
       const api = yield* CalendarApi
-      const events = yield* api.getEvents(
+      const { events, workingLocations } = yield* api.getEvents(
+        "work",
         "2026-06-25T00:00:00Z",
         "2026-06-26T00:00:00Z",
         "UTC"
       )
       expect(events.length).toBe(0)
+      expect(workingLocations.length).toBe(0)
     }).pipe(
       Effect.provide(
         make.pipe(
@@ -113,7 +200,8 @@ describe("CalendarApi", () => {
   it.effect("handles missing summary gracefully", () =>
     Effect.gen(function* () {
       const api = yield* CalendarApi
-      const events = yield* api.getEvents(
+      const { events } = yield* api.getEvents(
+        "work",
         "2026-06-25T00:00:00Z",
         "2026-06-26T00:00:00Z",
         "UTC"
@@ -156,7 +244,7 @@ describe("CalendarApi", () => {
     Effect.gen(function* () {
       const api = yield* CalendarApi
       const error = yield* api
-        .getEvents("2026-06-25T00:00:00Z", "2026-06-26T00:00:00Z", "UTC")
+        .getEvents("work", "2026-06-25T00:00:00Z", "2026-06-26T00:00:00Z", "UTC")
         .pipe(Effect.flip)
       expect(error).toBeInstanceOf(CalendarError)
       expect(error.message).toContain("Calendar API error")
@@ -191,7 +279,7 @@ describe("CalendarApi", () => {
     Effect.gen(function* () {
       const api = yield* CalendarApi
       const error = yield* api
-        .getEvents("2026-06-25T00:00:00Z", "2026-06-26T00:00:00Z", "UTC")
+        .getEvents("work", "2026-06-25T00:00:00Z", "2026-06-26T00:00:00Z", "UTC")
         .pipe(Effect.flip)
       expect(error).toBeInstanceOf(CalendarError)
       expect(error.message).toContain("Authentication failed")
@@ -202,6 +290,7 @@ describe("CalendarApi", () => {
             Layer.succeed(AuthService, {
               getAccessToken: () =>
                 Effect.fail(new AuthError({ message: "test" })),
+              runDeviceFlow: () => Effect.succeed({ tokens: { accessToken: "", refreshToken: "", expiry: "" }, email: "" }),
             })
           ),
           Layer.provideMerge(
@@ -224,9 +313,10 @@ describe("CalendarApi", () => {
   it.effect("makeTest returns mock events", () =>
     Effect.gen(function* () {
       const api = yield* CalendarApi
-      const events = yield* api.getEvents("", "", "")
+      const { events, workingLocations } = yield* api.getEvents("any", "", "", "")
       expect(events.length).toBe(1)
       expect(events[0]?.title).toBe("Mock Event")
+      expect(workingLocations.length).toBe(0)
     }).pipe(
       Effect.provide(
         makeTest([{ id: "1", title: "Mock Event", start: "", end: "" }])
