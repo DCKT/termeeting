@@ -111,14 +111,43 @@ const formatNextEventHuman = (
   return lines.join("\n")
 }
 
-const parseDate = (dateStr: string): Effect.Effect<DateTime.DateTime, CliError> => {
-  const dtOpt = DateTime.make(dateStr + "T00:00:00")
+const parseDate = (
+  dateStr: string,
+  timeZone: string
+): Effect.Effect<DateTime.DateTime, CliError> => {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr)
+  if (!parts) {
+    return Effect.fail(
+      new CliError({ message: `Invalid date: ${dateStr}. Use YYYY-MM-DD format.` })
+    )
+  }
+  const [, y, m, d] = parts
+  const year = parseInt(y!)
+  const month = parseInt(m!)
+  const day = parseInt(d!)
+
+  const utcMidnight = Date.UTC(year, month - 1, day, 0, 0, 0)
+  const offsetStr = getTimezoneOffset(utcMidnight, timeZone)
+  const offsetMatch = offsetStr.match(/([+-])(\d{2}):(\d{2})/)
+  if (!offsetMatch) {
+    return Effect.fail(
+      new CliError({ message: `Invalid date: ${dateStr}. Use YYYY-MM-DD format.` })
+    )
+  }
+  const [, offsetSign, offsetHours, offsetMinutes] = offsetMatch
+  const sign = offsetSign === "-" ? -1 : 1
+  const offsetMs =
+    sign * (parseInt(offsetHours!) * 3600000 + parseInt(offsetMinutes!) * 60000)
+
+  const targetEpoch = utcMidnight - offsetMs
+  const dtOpt = DateTime.make(targetEpoch)
   if (Option.isNone(dtOpt)) {
     return Effect.fail(
       new CliError({ message: `Invalid date: ${dateStr}. Use YYYY-MM-DD format.` })
     )
   }
-  return Effect.succeed(dtOpt.value)
+
+  return Effect.succeed(DateTime.unsafeSetZoneNamed(dtOpt.value, timeZone))
 }
 
 const getTimezoneOffset = (epochMs: number, timeZone: string): string => {
@@ -155,193 +184,197 @@ const formatDateRange = (
   return { timeMin, timeMax }
 }
 
-export const make = Layer.effect(
-  CliService,
-  Effect.gen(function* () {
-    const calendarApi = yield* CalendarApi
-    const configStore = yield* ConfigStore
-    const platform = yield* PlatformService
-    const authService = yield* AuthService
+export const make = (options?: {
+  timeZone?: string
+}) =>
+  Layer.effect(
+    CliService,
+    Effect.gen(function* () {
+      const calendarApi = yield* CalendarApi
+      const configStore = yield* ConfigStore
+      const platform = yield* PlatformService
+      const authService = yield* AuthService
+      const timeZone =
+        options?.timeZone ??
+        Intl.DateTimeFormat().resolvedOptions().timeZone
 
-    const prompt = (question: string): Effect.Effect<string, CliError> =>
-      platform.prompt(question).pipe(
-        Effect.mapError(
-          (cause) =>
-            new CliError({ message: `Input error: ${cause.message}` })
+      const prompt = (question: string): Effect.Effect<string, CliError> =>
+        platform.prompt(question).pipe(
+          Effect.mapError(
+            (cause) =>
+              new CliError({ message: `Input error: ${cause.message}` })
+          )
         )
-      )
 
-    const runEvents = (
-      json: boolean,
-      dateStr: string | undefined
-    ): Effect.Effect<string, CliError> =>
-      Effect.gen(function* () {
-        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-        const now = DateTime.unsafeNow()
-        const targetDate = dateStr
-          ? yield* parseDate(dateStr)
-          : now
+      const runEvents = (
+        json: boolean,
+        dateStr: string | undefined
+      ): Effect.Effect<string, CliError> =>
+        Effect.gen(function* () {
+          const now = DateTime.unsafeNow()
+          const targetDate = dateStr
+            ? yield* parseDate(dateStr, timeZone)
+            : now
 
-        const dateLabel = formatDateLabel(targetDate, now, timeZone)
-        const { timeMin, timeMax } = formatDateRange(targetDate, timeZone)
+          const dateLabel = formatDateLabel(targetDate, now, timeZone)
+          const { timeMin, timeMax } = formatDateRange(targetDate, timeZone)
 
-        const events = yield* calendarApi
-          .getEvents(timeMin, timeMax, timeZone)
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new CliError({
-                  message: `Failed to fetch events: ${cause.message}`,
-                })
+          const events = yield* calendarApi
+            .getEvents(timeMin, timeMax, timeZone)
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new CliError({
+                    message: `Failed to fetch events: ${cause.message}`,
+                  })
+              )
             )
-          )
 
-        if (json) {
-          return formatEventsJson(events)
-        }
+          if (json) {
+            return formatEventsJson(events)
+          }
 
-        if (events.length === 0) {
-          return `📅 ${dateLabel}\n\nNo events scheduled.`
-        }
+          if (events.length === 0) {
+            return `📅 ${dateLabel}\n\nNo events scheduled.`
+          }
 
-        return formatEventsHuman(events, dateLabel, timeZone)
-      })
-
-    const runNext = (json: boolean): Effect.Effect<string, CliError> =>
-      Effect.gen(function* () {
-        const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
-        const now = DateTime.unsafeNow()
-        const { timeMin, timeMax } = formatDateRange(now, timeZone)
-
-        const events = yield* calendarApi
-          .getEvents(timeMin, timeMax, timeZone)
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new CliError({
-                  message: `Failed to fetch events: ${cause.message}`,
-                })
-            )
-          )
-
-        const upcoming = events.filter((e) => {
-          const endOpt = DateTime.make(e.end)
-          if (Option.isNone(endOpt)) return false
-          return endOpt.value.epochMillis > now.epochMillis
+          return formatEventsHuman(events, dateLabel, timeZone)
         })
 
-        const next = upcoming[0]
-        if (!next) {
-          return "No upcoming events today."
-        }
+      const runNext = (json: boolean): Effect.Effect<string, CliError> =>
+        Effect.gen(function* () {
+          const now = DateTime.unsafeNow()
+          const { timeMin, timeMax } = formatDateRange(now, timeZone)
 
-        if (json) {
-          return stringifyJson({
-            id: next.id,
-            title: next.title,
-            start: next.start,
-            end: next.end,
-            ...(next.location ? { location: next.location } : {}),
-            ...(next.description ? { description: next.description } : {}),
-            ...(next.htmlLink ? { htmlLink: next.htmlLink } : {}),
-            ...(next.conferenceLink ? { conferenceLink: next.conferenceLink } : {}),
-          })
-        }
-
-        return formatNextEventHuman(next, timeZone)
-      })
-
-    const runSetup = (): Effect.Effect<string, CliError> =>
-      Effect.gen(function* () {
-        yield* Console.log("Termeeting — Google OAuth Setup")
-        yield* Console.log("")
-
-        const attempt = (): Effect.Effect<string, CliError> =>
-          Effect.gen(function* () {
-            const clientId = yield* prompt("Google OAuth Client ID: ")
-            if (!clientId.trim()) {
-              return yield* new CliError({
-                message: "Client ID is required.",
-              })
-            }
-
-            const clientSecret = yield* prompt(
-              "Google OAuth Client Secret: ",
+          const events = yield* calendarApi
+            .getEvents(timeMin, timeMax, timeZone)
+            .pipe(
+              Effect.mapError(
+                (cause) =>
+                  new CliError({
+                    message: `Failed to fetch events: ${cause.message}`,
+                  })
+              )
             )
-            if (!clientSecret.trim()) {
-              return yield* new CliError({
-                message: "Client Secret is required.",
-              })
-            }
 
-            yield* configStore
-              .write({
-                clientId: clientId.trim(),
-                clientSecret: clientSecret.trim(),
-              })
-              .pipe(
-                Effect.mapError(
-                  (cause) =>
-                    new CliError({
-                      message: `Failed to save config: ${cause.message}`,
-                    }),
-                ),
-              )
-
-            const result = yield* authService
-              .authenticate()
-              .pipe(Effect.either)
-
-            if (Either.isRight(result)) {
-              return "Setup complete!\n\nYou're all set! Run 'termeeting' to view your events."
-            }
-
-            const error = result.left
-            if (error._tag === "AuthRetryableError") {
-              yield* Console.log("")
-              yield* Console.log(
-                `Authentication failed: ${error.message}`,
-              )
-              yield* Console.log(
-                "Please check your credentials and try again.\n",
-              )
-              return yield* attempt()
-            }
-
-            return yield* new CliError({
-              message: `Setup failed: ${error.message}`,
-            })
+          const upcoming = events.filter((e) => {
+            const endOpt = DateTime.make(e.end)
+            if (Option.isNone(endOpt)) return false
+            return endOpt.value.epochMillis > now.epochMillis
           })
 
-        return yield* attempt()
-      })
+          const next = upcoming[0]
+          if (!next) {
+            return "No upcoming events today."
+          }
 
-    const run = (args: readonly string[]): Effect.Effect<string, CliError> =>
-      Effect.gen(function* () {
-        if (args[0] === "setup") {
-          return yield* runSetup()
-        }
+          if (json) {
+            return stringifyJson({
+              id: next.id,
+              title: next.title,
+              start: next.start,
+              end: next.end,
+              ...(next.location ? { location: next.location } : {}),
+              ...(next.description ? { description: next.description } : {}),
+              ...(next.htmlLink ? { htmlLink: next.htmlLink } : {}),
+              ...(next.conferenceLink ? { conferenceLink: next.conferenceLink } : {}),
+            })
+          }
 
-        if (args[0] === "next") {
+          return formatNextEventHuman(next, timeZone)
+        })
+
+      const runSetup = (): Effect.Effect<string, CliError> =>
+        Effect.gen(function* () {
+          yield* Console.log("Termeeting — Google OAuth Setup")
+          yield* Console.log("")
+
+          const attempt = (): Effect.Effect<string, CliError> =>
+            Effect.gen(function* () {
+              const clientId = yield* prompt("Google OAuth Client ID: ")
+              if (!clientId.trim()) {
+                return yield* new CliError({
+                  message: "Client ID is required.",
+                })
+              }
+
+              const clientSecret = yield* prompt(
+                "Google OAuth Client Secret: ",
+              )
+              if (!clientSecret.trim()) {
+                return yield* new CliError({
+                  message: "Client Secret is required.",
+                })
+              }
+
+              yield* configStore
+                .write({
+                  clientId: clientId.trim(),
+                  clientSecret: clientSecret.trim(),
+                })
+                .pipe(
+                  Effect.mapError(
+                    (cause) =>
+                      new CliError({
+                        message: `Failed to save config: ${cause.message}`,
+                      }),
+                  ),
+                )
+
+              const result = yield* authService
+                .authenticate()
+                .pipe(Effect.either)
+
+              if (Either.isRight(result)) {
+                return "Setup complete!\n\nYou're all set! Run 'termeeting' to view your events."
+              }
+
+              const error = result.left
+              if (error._tag === "AuthRetryableError") {
+                yield* Console.log("")
+                yield* Console.log(
+                  `Authentication failed: ${error.message}`,
+                )
+                yield* Console.log(
+                  "Please check your credentials and try again.\n",
+                )
+                return yield* attempt()
+              }
+
+              return yield* new CliError({
+                message: `Setup failed: ${error.message}`,
+              })
+            })
+
+          return yield* attempt()
+        })
+
+      const run = (args: readonly string[]): Effect.Effect<string, CliError> =>
+        Effect.gen(function* () {
+          if (args[0] === "setup") {
+            return yield* runSetup()
+          }
+
+          if (args[0] === "next") {
+            const json = args.includes("--json") || args.includes("-j")
+            return yield* runNext(json)
+          }
+
           const json = args.includes("--json") || args.includes("-j")
-          return yield* runNext(json)
-        }
+          const dateIdx = args.findIndex(
+            (a) => a === "--date" || a === "-d"
+          )
+          const dateStr =
+            dateIdx >= 0 && dateIdx + 1 < args.length
+              ? args[dateIdx + 1]
+              : undefined
 
-        const json = args.includes("--json") || args.includes("-j")
-        const dateIdx = args.findIndex(
-          (a) => a === "--date" || a === "-d"
-        )
-        const dateStr =
-          dateIdx >= 0 && dateIdx + 1 < args.length
-            ? args[dateIdx + 1]
-            : undefined
+          return yield* runEvents(json, dateStr)
+        })
 
-        return yield* runEvents(json, dateStr)
-      })
-
-    return { run } as const
-  })
-)
+      return { run } as const
+    })
+  )
 
 export const makeTest = (output?: string): Layer.Layer<CliService> =>
   Layer.succeed(CliService, {

@@ -31,7 +31,7 @@ describe("CliService", () => {
       expect(output).toContain("No events scheduled")
     }).pipe(
       Effect.provide(
-        make.pipe(
+        make({ timeZone: "UTC" }).pipe(
           Layer.provideMerge(mockCalendarApi([])),
           Layer.provideMerge(mockConfigStore),
           Layer.provideMerge(mockAuth),
@@ -50,7 +50,7 @@ describe("CliService", () => {
       expect(output).toContain("09:00")
     }).pipe(
       Effect.provide(
-        make.pipe(
+        make({ timeZone: "UTC" }).pipe(
           Layer.provideMerge(
             Layer.succeed(CalendarApi, {
               getEvents: () =>
@@ -58,8 +58,8 @@ describe("CliService", () => {
                   {
                     id: "1",
                     title: "Standup",
-                    start: "2026-06-25T09:00:00+02:00",
-                    end: "2026-06-25T09:30:00+02:00",
+                    start: "2026-06-25T09:00:00Z",
+                    end: "2026-06-25T09:30:00Z",
                     location: "Room 3",
                   },
                 ]),
@@ -82,7 +82,7 @@ describe("CliService", () => {
       expect(parsed[0].title).toBe("Standup")
     }).pipe(
       Effect.provide(
-        make.pipe(
+        make({ timeZone: "UTC" }).pipe(
           Layer.provideMerge(
             Layer.succeed(CalendarApi, {
               getEvents: () =>
@@ -90,8 +90,8 @@ describe("CliService", () => {
                   {
                     id: "1",
                     title: "Standup",
-                    start: "2026-06-25T09:00:00+02:00",
-                    end: "2026-06-25T10:00:00+02:00",
+                    start: "2026-06-25T09:00:00Z",
+                    end: "2026-06-25T10:00:00Z",
                   },
                 ]),
             })
@@ -111,7 +111,7 @@ describe("CliService", () => {
       expect(Array.isArray(parsed)).toBe(true)
     }).pipe(
       Effect.provide(
-        make.pipe(
+        make({ timeZone: "UTC" }).pipe(
           Layer.provideMerge(mockCalendarApi()),
           Layer.provideMerge(mockConfigStore),
           Layer.provideMerge(mockAuth),
@@ -127,7 +127,7 @@ describe("CliService", () => {
       expect(output).toContain("June 30, 2026")
     }).pipe(
       Effect.provide(
-        make.pipe(
+        make({ timeZone: "UTC" }).pipe(
           Layer.provideMerge(mockCalendarApi()),
           Layer.provideMerge(mockConfigStore),
           Layer.provideMerge(mockAuth),
@@ -146,7 +146,7 @@ describe("CliService", () => {
       expect(error.message).toContain("Invalid date")
     }).pipe(
       Effect.provide(
-        make.pipe(
+        make({ timeZone: "UTC" }).pipe(
           Layer.provideMerge(mockCalendarApi()),
           Layer.provideMerge(mockConfigStore),
           Layer.provideMerge(mockAuth),
@@ -162,7 +162,7 @@ describe("CliService", () => {
       expect(error.message).toContain("Failed to fetch events")
     }).pipe(
       Effect.provide(
-        make.pipe(
+        make({ timeZone: "UTC" }).pipe(
           Layer.provideMerge(
             Layer.succeed(CalendarApi, {
               getEvents: () => Effect.fail({ message: "API down" }),
@@ -192,7 +192,7 @@ describe("CliService", () => {
         expect(output).toContain("Setup complete")
       }).pipe(
         Effect.provide(
-          make.pipe(
+          make({ timeZone: "UTC" }).pipe(
             Layer.provideMerge(mockCalendar),
             Layer.provideMerge(
               Layer.succeed(ConfigStore, {
@@ -219,7 +219,7 @@ describe("CliService", () => {
         expect(error.message).toContain("Client ID is required")
       }).pipe(
         Effect.provide(
-          make.pipe(
+          make({ timeZone: "UTC" }).pipe(
             Layer.provideMerge(mockCalendar),
             Layer.provideMerge(
               Layer.succeed(ConfigStore, {
@@ -247,7 +247,7 @@ describe("CliService", () => {
         expect(error.message).toContain("Client Secret is required")
       }).pipe(
         Effect.provide(
-          make.pipe(
+          make({ timeZone: "UTC" }).pipe(
             Layer.provideMerge(mockCalendar),
             Layer.provideMerge(
               Layer.succeed(ConfigStore, {
@@ -280,7 +280,7 @@ describe("CliService", () => {
         expect(authCalls).toBe(2)
       }).pipe(
         Effect.provide(
-          make.pipe(
+          make({ timeZone: "UTC" }).pipe(
             Layer.provideMerge(mockCalendar),
             Layer.provideMerge(
               Layer.succeed(ConfigStore, {
@@ -323,7 +323,7 @@ describe("CliService", () => {
         expect(error.message).toContain("Token exchange request failed")
       }).pipe(
         Effect.provide(
-          make.pipe(
+          make({ timeZone: "UTC" }).pipe(
             Layer.provideMerge(mockCalendar),
             Layer.provideMerge(
               Layer.succeed(ConfigStore, {

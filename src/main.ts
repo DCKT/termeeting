@@ -8,7 +8,7 @@ import { make as calendarApiMake } from "./calendar/CalendarApi.js"
 import { CliService, make as cliServiceMake } from "./cli/CliService.js"
 import { Console, Effect, Layer } from "effect"
 
-const appLayer = cliServiceMake.pipe(
+const appLayer = cliServiceMake().pipe(
   Layer.provide(calendarApiMake),
   Layer.provide(authServiceMake),
   Layer.provide(tokenStoreMake),
