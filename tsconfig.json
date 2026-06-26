@@ -1,0 +1,52 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Effect-TS/tsgo/refs/heads/main/schema.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": true,
+    "declaration": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
+    "plugins": [
+      // ... other LSPs (if any) and as last
+      {
+        "name": "@effect/language-service",
+"diagnosticSeverity": {
+	"asyncFunction": "warning",
+	"cryptoRandomUUID": "warning",
+	"cryptoRandomUUIDInEffect": "warning",
+	"extendsNativeError": "warning",
+	"globalConsole": "warning",
+	"globalConsoleInEffect": "warning",
+	"globalDate": "warning",
+	"globalDateInEffect": "warning",
+	"globalFetch": "warning",
+	"globalFetchInEffect": "warning",
+	"globalRandom": "warning",
+	"globalRandomInEffect": "warning",
+	"globalTimers": "warning",
+	"globalTimersInEffect": "warning",
+	"instanceOfSchema": "warning",
+	"newPromise": "warning",
+	"nodeBuiltinImport": "warning",
+	"preferSchemaOverJson": "warning",
+	"processEnv": "warning",
+	"processEnvInEffect": "warning",
+	"unsafeEffectTypeAssertion": "warning"
+}
+      }
+    ]
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist", "test"]
+}
