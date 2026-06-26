@@ -6,6 +6,9 @@
   "bin": {
     "termeeting": "./dist/termeeting"
   },
+  "files": [
+    "dist/"
+  ],
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
