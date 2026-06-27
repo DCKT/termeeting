@@ -1,7 +1,6 @@
 import { FileSystem } from "@effect/platform/FileSystem"
 import { Path } from "@effect/platform/Path"
-import { PlatformService } from "../platform/PlatformService.js"
-import { Context, Effect, Layer, Option, Schema } from "effect"
+import { Config, Context, Effect, Layer, Option, Schema } from "effect"
 
 const ConfigSchema = Schema.Struct({
   clientId: Schema.String,
@@ -38,8 +37,8 @@ export const make = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FileSystem
     const path = yield* Path
-    const platform = yield* PlatformService
-    const configDir = path.join(platform.homeDir, ".config", "termeeting")
+    const homeDir = yield* Config.string("HOME").pipe(Config.withDefault("/tmp"))
+    const configDir = path.join(homeDir, ".config", "termeeting")
     const configFile = path.join(configDir, "config.json")
 
     const ensureDir = (): Effect.Effect<void, ConfigStoreError> =>

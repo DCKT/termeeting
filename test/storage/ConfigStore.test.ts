@@ -1,11 +1,13 @@
 import { describe, it, expect } from "@effect/vitest"
-import { Effect, Layer, Option } from "effect"
+import { ConfigProvider, Effect, Layer, Option } from "effect"
 import { FileSystem } from "@effect/platform/FileSystem"
 import { Path } from "@effect/platform/Path"
 import { ConfigStore, ConfigStoreError, make } from "../../src/storage/ConfigStore.js"
 import { makeTest } from "../helpers/ConfigStore.js"
-import { PlatformService } from "../../src/platform/PlatformService.js"
-import { makeTest as platformMakeTest } from "../helpers/PlatformService.js"
+
+const homeProvider = ConfigProvider.fromJson({ HOME: "/home/user" }).pipe(
+  Layer.setConfigProvider
+)
 
 const mockPath = Layer.succeed(Path, {
   sep: "/",
@@ -41,7 +43,7 @@ const mockPath = Layer.succeed(Path, {
 
 const baseLayer = make.pipe(
   Layer.provideMerge(mockPath),
-  Layer.provideMerge(platformMakeTest())
+  Layer.provideMerge(homeProvider)
 )
 
 const makeFsLayer = (overrides: Partial<FileSystem>): Layer.Layer<FileSystem> =>

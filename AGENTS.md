@@ -4,7 +4,7 @@ CLI for Google Calendar (read-only). Returns events in human-readable or JSON fo
 
 ## Stack
 
-- **Runtime:** Node.js via tsx
+- **Runtime:** Bun via `@effect/platform-bun`
 - **Language:** TypeScript (strict)
 - **Core:** Effect-TS (`effect`, `@effect/cli`, `@effect/platform`)
 - **Testing:** vitest + `@effect/vitest`
@@ -17,14 +17,16 @@ CLI for Google Calendar (read-only). Returns events in human-readable or JSON fo
 src/
 ├── main.ts                  # entrypoint
 ├── cli/
-│   └── CliService.ts        # arg parsing, output formatting, wiring
+│   ├── CliService.ts        # Command tree, handler functions, formatting
+│   └── migration.ts         # legacy token migration
 ├── auth/
-│   └── AuthService.ts       # OAuth loopback orchestration
+│   └── AuthService.ts       # OAuth device flow orchestration
 ├── calendar/
 │   └── CalendarApi.ts       # Google Calendar HTTP client
 └── storage/
     ├── TokenStore.ts        # read/write tokens from disk
-    └── ConfigStore.ts       # read/write config from disk
+    ├── ConfigStore.ts       # read/write config from disk
+    └── AccountStore.ts      # multi-account registry (accounts.json)
 test/
 ├── cli/
 │   └── CliService.test.ts
@@ -32,9 +34,17 @@ test/
 │   └── AuthService.test.ts
 ├── calendar/
 │   └── CalendarApi.test.ts
-└── storage/
-    ├── TokenStore.test.ts
-    └── ConfigStore.test.ts
+├── storage/
+│   ├── TokenStore.test.ts
+│   ├── ConfigStore.test.ts
+│   └── AccountStore.test.ts
+└── helpers/
+    ├── AccountStore.ts
+    ├── AuthService.ts
+    ├── CalendarApi.ts
+    ├── CliService.ts
+    ├── ConfigStore.ts
+    └── TokenStore.ts
 ```
 
 ## Architecture
@@ -44,68 +54,87 @@ test/
 ```typescript
 // CalendarApi.ts — talks to Google Calendar REST API
 class CalendarApi extends Context.Tag("CalendarApi")<CalendarApi, {
-  getEvents(timeMin: string, timeMax: string, timeZone: string): Effect<readonly Event[], CalendarError>
+  getEvents(nickname: string, timeMin: string, timeMax: string, timeZone: string): Effect<GetEventsResult, CalendarError>
 }>() {}
 
-// TokenStore.ts — persists OAuth tokens to disk
+// TokenStore.ts — persists OAuth tokens to disk, parameterized by nickname
 class TokenStore extends Context.Tag("TokenStore")<TokenStore, {
-  read(): Effect<Option<TokenSet>, TokenStoreError>
-  write(tokens: TokenSet): Effect<void, TokenStoreError>
+  read(nickname: string): Effect<Option<TokenSet>, TokenStoreError>
+  write(nickname: string, tokens: TokenSet): Effect<void, TokenStoreError>
+  deleteToken(nickname: string): Effect<void, TokenStoreError>
 }>() {}
 
-// AuthService.ts — orchestrates OAuth flow, refreshes tokens
+// AuthService.ts — orchestrates OAuth device flow, refreshes tokens
 class AuthService extends Context.Tag("AuthService")<AuthService, {
-  getAccessToken(): Effect<string, AuthError>
+  getAccessToken(nickname: string): Effect<string, AuthError>
+  runDeviceFlow(nickname: string): Effect<TokenAndEmail, AuthError>
 }>() {}
 
-// CliService.ts — parses args, formats output, calls CalendarApi
+// CliService.ts — builds Command tree, exports handler functions
 class CliService extends Context.Tag("CliService")<CliService, {
-  run(args: readonly string[]): Effect<string, CliError>
+  command: Command.Command<any, any, any, any>
 }>() {}
 ```
 
 Dependency graph:
 
 ```
-CliService → CalendarApi → AuthService → TokenStore
-           ↘ ConfigStore
+CliService → Command tree (built via @effect/cli)
+  handlers → CalendarApi → AuthService → TokenStore
+           → AccountStore
+           → ConfigStore
+           → Prompt (@effect/cli)
 ```
 
-CalendarApi requires HttpClient (for API calls). AuthService requires HttpClient (for OAuth token exchange).
+CalendarApi requires HttpClient. AuthService requires HttpClient + CommandExecutor (for openUrl). ConfigStore, TokenStore, AccountStore require FileSystem + Path + Config (HOME).
 
 ## OAuth flow
 
-Loopback redirect on `http://localhost:3000/oauth/callback`:
+Device flow via Google OAuth:
 
-1. Start temporary HTTP server on port 3000
-2. Open browser to Google consent URL
-3. Google redirects to localhost with auth code
-4. Exchange code for token set (access + refresh)
-5. Store tokens in `~/.config/termeeting/google-token.json`
-6. On subsequent runs: load tokens, refresh if expired
+1. User runs `termeeting setup` or `termeeting account add <nickname>`
+2. App polls Google device code endpoint, obtains `user_code` + `verification_url`
+3. Opens browser to verification URL
+4. User enters code, grants calendar.readonly scope
+5. App polls token endpoint, receives access + refresh tokens
+6. Stores tokens in `~/.config/termeeting/tokens/<nickname>.json`
+7. Resolves email via Calendar API primary calendar endpoint
 
 ## Storage
 
 ```
 ~/.config/termeeting/
 ├── config.json          # { "clientId": "...", "clientSecret": "..." }  (user-managed)
-└── google-token.json    # { "accessToken": "...", "refreshToken": "...", "expiry": "..." }  (program-managed)
+├── accounts.json        # { accounts: [...], default: "work" }
+└── tokens/
+    ├── work.json        # { accessToken, refreshToken, expiry }
+    └── personal.json
 ```
 
 ## CLI interface
 
+Uses `@effect/cli` `Command` / `Args` / `Options` for structured parsing:
+
 ```
-termeeting                        # today's events, human-readable table
+termeeting                        # today's events, human-readable
 termeeting --json                 # today's events, JSON
 termeeting --date 2026-06-30     # events for specific date
+termeeting --account work         # use specific account
+termeeting next                   # next upcoming event today
+termeeting next --json            # next event, JSON
 termeeting setup                  # guided OAuth app registration
+termeeting account add [nickname] # add new account
+termeeting account list           # list accounts
+termeeting account list --json    # list accounts, JSON
+termeeting account remove <nickname>
+termeeting account set-default <nickname>
 ```
 
 Human-readable output format:
 
 ```
 📅 Today — Wednesday, June 25, 2026
-─────────────────────────────────────
+────────────────────────────────────
 09:00–10:00  Standup              (Room 3)
 14:00–15:00  Design review        Google Meet
 ```
@@ -120,7 +149,8 @@ Human-readable output format:
 
 - Framework: vitest + `@effect/vitest`
 - Each service gets unit tests with mock layers (`Layer.succeed(tag, mock)`)
-- Integration tests wire real layers: TokenStore with temp dir, CalendarApi with mock HTTP
+- Handler functions exported for isolated unit testing
+- Captured console output via `Console.withConsole` for handler tests
 - Concrete examples, no property-based testing required
 
 ## Commands
@@ -128,16 +158,17 @@ Human-readable output format:
 ```bash
 npm test              # run all tests
 npm run typecheck     # tsc --noEmit
-npm run lint          # eslint / biome
-npm run build         # compile (if bundling)
+npm run lint          # tsc --noEmit
+npm run build         # bun build --compile
 ```
 
 ## Conventions
 
 - Every service file exports: `Tag`, the class/interface, `make` (live layer)
 - Test layer factories (`makeTest`) live in `test/helpers/<ServiceName>.ts`, one per service
+- Handler functions exported from CliService.ts for unit testing
 - Errors are tagged types (`Data.TaggedError`), never raw strings
-- No `any` or type casts in production code
+- No `any` or type casts in production code (except main.ts entrypoint)
 - No global `Error` in Effect error channels
 - Prefer `mapError` over `catchAll` for error transformation
 - No `catchAllCause` — never hide defects
@@ -148,7 +179,7 @@ npm run build         # compile (if bundling)
 - `Layer` composition uses `Layer.provide` / `Layer.merge`
 - Entrypoint catches all errors and prints user-friendly messages
 
-**Effect coding guidelines:** See [`docs/effect-guidelines.md`](docs/effect-guidelines.md) — adapted from [mikearnaldi/accountability](https://github.com/mikearnaldi/accountability).
+**Effect coding guidelines:** See [`docs/effect-guidelines.md`](docs/effect-guidelines.md).
 
 ## Agent skills
 
@@ -162,4 +193,4 @@ Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-
 
 ### Domain docs
 
-Single-context layout: `CONTEXT.md` + `docs/adr/` at repo root (not yet created). See `docs/agents/domain.md`.
+Single-context layout: `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.

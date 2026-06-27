@@ -1,7 +1,8 @@
 import { CliService } from "../../src/cli/CliService.js"
-import { Effect, Layer } from "effect"
+import { Command } from "@effect/cli"
+import { Layer } from "effect"
 
-export const makeTest = (output?: string): Layer.Layer<CliService> =>
+export const makeTest = (): Layer.Layer<CliService> =>
   Layer.succeed(CliService, {
-    run: () => Effect.succeed(output ?? "test output"),
-  })
+    command: Command.make("test"),
+  } as any)

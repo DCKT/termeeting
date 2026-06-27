@@ -1,6 +1,6 @@
 import { HttpClient } from "@effect/platform/HttpClient"
 import { post, bodyJson } from "@effect/platform/HttpClientRequest"
-import { PlatformService } from "../platform/PlatformService.js"
+import { Command, CommandExecutor } from "@effect/platform"
 import { ConfigStore } from "../storage/ConfigStore.js"
 import { TokenStore, type TokenSet } from "../storage/TokenStore.js"
 import {
@@ -53,7 +53,15 @@ export const make = Layer.effect(
     const configStore = yield* ConfigStore
     const tokenStore = yield* TokenStore
     const client = yield* HttpClient
-    const platform = yield* PlatformService
+    const executor = yield* CommandExecutor.CommandExecutor
+
+    const openUrl = (url: string): Effect.Effect<void, AuthError> =>
+      executor.exitCode(Command.make("open", url)).pipe(
+        Effect.mapError((cause) =>
+          new AuthError({ message: "Failed to open browser", cause }),
+        ),
+        Effect.asVoid,
+      )
 
     const parseTokenResponse = (
       raw: unknown,
@@ -338,7 +346,7 @@ export const make = Layer.effect(
         yield* Console.log(`  2. Enter code: ${userCode}`)
         yield* Console.log("")
 
-        yield* platform.openUrl(verificationUrl).pipe(
+        yield* openUrl(verificationUrl).pipe(
           Effect.catchAll(() =>
             Console.log("  (Browser could not be opened automatically)"),
           ),
@@ -384,7 +392,7 @@ export const make = Layer.effect(
           )
 
         return { tokens, email }
-      }).pipe(Effect.provideService(PlatformService, platform))
+      })
 
     const getAccessToken = (nickname: string): Effect.Effect<string, AuthError> =>
       Effect.gen(function* () {
@@ -445,9 +453,8 @@ export const make = Layer.effect(
         const { tokens: newTokens } = yield* runDeviceFlow(nickname)
 
         return newTokens.accessToken
-      }).pipe(Effect.provideService(PlatformService, platform))
+      })
 
     return { getAccessToken, runDeviceFlow } as const
   }),
 )
-

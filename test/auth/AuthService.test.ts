@@ -1,6 +1,7 @@
 import { describe, it, expect } from "@effect/vitest"
 import { Effect, Layer, Option } from "effect"
 import { HttpClient } from "@effect/platform/HttpClient"
+import { CommandExecutor } from "@effect/platform"
 import { ConfigStore, ConfigStoreError } from "../../src/storage/ConfigStore.js"
 import { TokenStore, TokenStoreError } from "../../src/storage/TokenStore.js"
 import {
@@ -9,10 +10,13 @@ import {
   make,
 } from "../../src/auth/AuthService.js"
 import { makeTest } from "../helpers/AuthService.js"
-import { PlatformService } from "../../src/platform/PlatformService.js"
-import { makeTest as platformMakeTest } from "../helpers/PlatformService.js"
 
-const mockPlatform = platformMakeTest()
+const mockCommandExecutor = Layer.succeed(CommandExecutor.CommandExecutor, {
+  exitCode: () => Effect.succeed(0),
+  start: () => Effect.fail(new Error("unused") as any),
+  string: () => Effect.fail(new Error("unused") as any),
+  lines: () => Effect.fail(new Error("unused") as any),
+} as any)
 
 const mockHttpClient = Layer.succeed(HttpClient, {
   execute: () =>
@@ -35,7 +39,7 @@ const mockHttpClient = Layer.succeed(HttpClient, {
 
 const baseLayer = make.pipe(
   Layer.provideMerge(mockHttpClient),
-  Layer.provideMerge(mockPlatform)
+  Layer.provideMerge(mockCommandExecutor)
 )
 
 describe("AuthService", () => {
@@ -130,7 +134,7 @@ describe("AuthService", () => {
               deleteToken: () => Effect.void,
             })
           ),
-          Layer.provideMerge(mockPlatform)
+          Layer.provideMerge(mockCommandExecutor)
         )
       )
     )
