@@ -1,4 +1,8 @@
 import { Command, Args, Options, Prompt } from "@effect/cli";
+import type * as ValidationError from "@effect/cli/ValidationError";
+import { FileSystem } from "@effect/platform/FileSystem";
+import { Path } from "@effect/platform/Path";
+import { Terminal } from "@effect/platform/Terminal";
 import { ConfigStore } from "../storage/ConfigStore.js";
 import { TokenStore } from "../storage/TokenStore.js";
 import { AccountStore, AccountStoreError } from "../storage/AccountStore.js";
@@ -27,7 +31,15 @@ export class CliError extends Schema.TaggedError<CliError>()("CliError", {
 export class CliService extends Context.Tag("CliService")<
   CliService,
   {
-    readonly command: Command.Command<any, any, any, any>;
+    readonly run: (
+      args: ReadonlyArray<string>,
+    ) => Effect.Effect<
+      void,
+      CliError | ValidationError.ValidationError,
+      | Context.Tag.Service<typeof FileSystem>
+      | Context.Tag.Service<typeof Path>
+      | Context.Tag.Service<typeof Terminal>
+    >;
   }
 >() {}
 
@@ -641,6 +653,13 @@ export const make = (options?: { timeZone?: string }) =>
       const timeZone =
         options?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+      const calendarApi = yield* CalendarApi;
+      const accountStore = yield* AccountStore;
+      const configStore = yield* ConfigStore;
+      const authService = yield* AuthService;
+      const tokenStore = yield* TokenStore;
+      const terminal = yield* Terminal;
+
       const events = Command.make(
         "termeeting",
         {
@@ -708,8 +727,19 @@ export const make = (options?: { timeZone?: string }) =>
 
       const command = events.pipe(
         Command.withSubcommands([next, setup, account]),
+        Command.provideSync(CalendarApi, calendarApi),
+        Command.provideSync(AccountStore, accountStore),
+        Command.provideSync(ConfigStore, configStore),
+        Command.provideSync(AuthService, authService),
+        Command.provideSync(TokenStore, tokenStore),
+        Command.provideSync(Terminal, terminal),
       );
 
-      return { command } as const;
+      const run = Command.run(command, {
+        name: "termeeting",
+        version: "1.1.0",
+      });
+
+      return { run };
     }),
   );
