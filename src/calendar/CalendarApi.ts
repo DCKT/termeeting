@@ -7,6 +7,7 @@ export interface Event {
   readonly title: string
   readonly start: string
   readonly end: string
+  readonly isAllDay: boolean
   readonly location: string | undefined
   readonly description: string | undefined
   readonly htmlLink: string | undefined
@@ -98,12 +99,14 @@ type GoogleCalendarEvent = typeof GoogleCalendarEventSchema.Type
 const parseEvent = (raw: GoogleCalendarEvent): Event => {
   const conferenceLink =
     raw.conferenceData?.entryPoints?.[0]?.uri
+  const isAllDay = raw.start.date != null && raw.start.dateTime == null
 
   return {
     id: raw.id,
     title: raw.summary ?? "(untitled)",
     start: raw.start.dateTime ?? raw.start.date ?? "",
     end: raw.end.dateTime ?? raw.end.date ?? "",
+    isAllDay,
     location: raw.location,
     description: raw.description,
     htmlLink: raw.htmlLink,

@@ -320,7 +320,7 @@ describe("CalendarApi", () => {
       expect(workingLocations.length).toBe(0)
     }).pipe(
       Effect.provide(
-        makeTest([{ id: "1", title: "Mock Event", start: "", end: "" }])
+        makeTest([{ id: "1", title: "Mock Event", start: "", end: "", isAllDay: false }])
       )
     )
   )

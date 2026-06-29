@@ -365,6 +365,7 @@ export const handleNext =
         );
 
       const upcoming = events.filter((e) => {
+        if (e.isAllDay) return false;
         const endOpt = DateTime.make(e.end);
         if (Option.isNone(endOpt)) return false;
         return endOpt.value.epochMillis > now.epochMillis;
