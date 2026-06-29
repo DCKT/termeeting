@@ -23,6 +23,7 @@ import {
   Redacted,
   Schema,
 } from "effect";
+import pkg from "../../package.json" with { type: "json" };
 
 export class CliError extends Schema.TaggedError<CliError>()("CliError", {
   message: Schema.String,
@@ -738,7 +739,7 @@ export const make = (options?: { timeZone?: string }) =>
 
       const run = Command.run(command, {
         name: "termeeting",
-        version: "1.1.0",
+        version: pkg.version,
       });
 
       return { run };
